@@ -1,3 +1,5 @@
+"""Version de consola del sistema de expedientes."""
+
 import os
 from datetime import datetime
 

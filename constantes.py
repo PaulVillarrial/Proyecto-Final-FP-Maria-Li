@@ -1,0 +1,15 @@
+"""Constantes de configuraci?n y presentaci?n."""
+
+ESTADO_INICIAL = "RECIBIDO"
+FORMATO_FECHA = "%Y-%m-%d %H:%M"
+
+BG_CONTENIDO = "#1c1c1e"
+BG_SIDEBAR = "#161618"
+BG_TARJETA = "#2c2c2e"
+BG_CAMPO = "#3a3a3c"
+COLOR_ACENTO = "#0a84ff"
+COLOR_ACENTO_HOVER = "#409cff"
+COLOR_EXITO = "#30d158"
+COLOR_ERROR = "#ff453a"
+COLOR_TEXTO = "#f5f5f7"
+COLOR_TEXTO_SEC = "#98989d"
