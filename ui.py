@@ -2,6 +2,7 @@
 
 import tkinter as tk
 import csv
+from collections import Counter
 from datetime import datetime
 from tkinter import filedialog, ttk
 
@@ -39,7 +40,7 @@ class App(ctk.CTk):
 
         self._configurar_estilo_tabla()
         self._construir_layout()
-        self.mostrar_vista("registrar")
+        self.mostrar_vista("estadisticas")
         self._fade_in_ventana()
 
     # -------------------------------------------------------------------------
@@ -85,7 +86,12 @@ class App(ctk.CTk):
             font=ctk.CTkFont("Segoe UI", 12), text_color=COLOR_TEXTO_SEC,
         ).pack(anchor="w", padx=24, pady=(0, 32))
 
-        opciones = [("registrar", "Registrar"), ("buscar", "Buscar"), ("listar", "Listar")]
+        opciones = [
+            ("registrar", "Registrar"),
+            ("buscar", "Buscar"),
+            ("listar", "Listar"),
+            ("estadisticas", "Estadísticas Generales"),
+        ]
         for clave, texto in opciones:
             boton = ctk.CTkButton(
                 self.sidebar, text=texto, anchor="w", height=42, corner_radius=10,
@@ -127,6 +133,12 @@ class App(ctk.CTk):
     def _actualizar_total(self):
         self.lbl_total.configure(text=f"{len(self.codigos)} expedientes registrados")
 
+    def _actualizar_dashboard_si_visible(self):
+        if getattr(self, "vista_actual", None) is not None:
+            if self.vista_actual.winfo_exists() and getattr(
+                    self, "vista_dashboard", None) is self.vista_actual:
+                self._pintar_dashboard()
+
     # -------------------------------------------------------------------------
     # Navegación entre vistas
     # -------------------------------------------------------------------------
@@ -148,6 +160,7 @@ class App(ctk.CTk):
             "registrar": self.vista_registrar,
             "buscar": self.vista_buscar,
             "listar": self.vista_listar,
+            "estadisticas": self.vista_estadisticas,
         }
         constructores[nombre](self.vista_actual)
         deslizar_entrada(self.vista_actual)
@@ -171,6 +184,164 @@ class App(ctk.CTk):
         """Muestra feedback en verde (éxito) o rojo (error) con fade-in. Sin messagebox."""
         etiqueta.configure(text=texto)
         fade_texto(etiqueta, COLOR_EXITO if exito else COLOR_ERROR)
+
+    # -------------------------------------------------------------------------
+    # VISTA 0: ESTADÍSTICAS GENERALES
+    # -------------------------------------------------------------------------
+    def vista_estadisticas(self, padre):
+        self._encabezado(
+            padre, "Estadísticas Generales",
+            "Resumen actualizado de los expedientes registrados.",
+        )
+        self.vista_dashboard = padre
+        self.dashboard_contenido = ctk.CTkScrollableFrame(
+            padre, corner_radius=0, fg_color=BG_CONTENIDO,
+            scrollbar_button_color=BG_CAMPO,
+            scrollbar_button_hover_color="#48484a",
+        )
+        self.dashboard_contenido.pack(fill="both", expand=True, padx=44, pady=(0, 20))
+        for columna in range(5):
+            self.dashboard_contenido.grid_columnconfigure(columna, weight=1)
+        self._pintar_dashboard()
+
+    def _pintar_dashboard(self):
+        for widget in self.dashboard_contenido.winfo_children():
+            widget.destroy()
+
+        estados = ("RECIBIDO", "EN PROCESO", "ATENDIDO", "ARCHIVADO")
+        conteo = Counter(self.estados)
+        tarjetas = [("TOTAL", len(self.codigos), COLOR_ACENTO)]
+        tarjetas.extend(
+            (estado, conteo.get(estado, 0),
+             COLOR_EXITO if estado == "RECIBIDO" else COLOR_ACENTO)
+            for estado in estados
+        )
+        for columna, (titulo, cantidad, color) in enumerate(tarjetas):
+            tarjeta = ctk.CTkFrame(
+                self.dashboard_contenido, height=92, corner_radius=14,
+                fg_color=BG_TARJETA,
+            )
+            tarjeta.grid(row=0, column=columna, sticky="ew", padx=4, pady=(4, 18))
+            tarjeta.grid_propagate(False)
+            ctk.CTkLabel(
+                tarjeta, text=titulo, anchor="w",
+                font=ctk.CTkFont("Segoe UI", 11, "bold"),
+                text_color=COLOR_TEXTO_SEC,
+            ).pack(anchor="w", padx=16, pady=(14, 0))
+            ctk.CTkLabel(
+                tarjeta, text=str(cantidad), anchor="w",
+                font=ctk.CTkFont("Segoe UI", 25, "bold"), text_color=color,
+            ).pack(anchor="w", padx=16)
+
+        fechas = [datetime.strptime(fecha, FORMATO_FECHA) for fecha in self.fechas]
+        informacion = [
+            ("Primer expediente", min(fechas).strftime(FORMATO_FECHA) if fechas else "—"),
+            ("Último expediente", max(fechas).strftime(FORMATO_FECHA) if fechas else "—"),
+            ("Remitentes únicos", str(len({v.casefold() for v in self.remitentes}))),
+            ("Estado más común", self._valor_mas_comun(self.estados)),
+            ("Asunto más común", self._valor_mas_comun(self.asuntos)),
+        ]
+        informacion_panel = ctk.CTkFrame(
+            self.dashboard_contenido, corner_radius=14, fg_color=BG_TARJETA,
+        )
+        informacion_panel.grid(
+            row=1, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 18)
+        )
+        ctk.CTkLabel(
+            informacion_panel, text="Información adicional", anchor="w",
+            font=ctk.CTkFont("Segoe UI", 15, "bold"), text_color=COLOR_TEXTO,
+        ).pack(anchor="w", padx=20, pady=(16, 8))
+        for etiqueta, valor in informacion:
+            fila = ctk.CTkFrame(informacion_panel, fg_color="transparent")
+            fila.pack(fill="x", padx=20, pady=4)
+            ctk.CTkLabel(
+                fila, text=etiqueta, width=170, anchor="w",
+                font=ctk.CTkFont("Segoe UI", 12, "bold"), text_color=COLOR_TEXTO_SEC,
+            ).pack(side="left")
+            ctk.CTkLabel(
+                fila, text=valor, anchor="w", text_color=COLOR_TEXTO,
+                font=ctk.CTkFont("Segoe UI", 12),
+            ).pack(side="left", fill="x", expand=True)
+
+        recientes_panel = ctk.CTkFrame(
+            self.dashboard_contenido, corner_radius=14, fg_color=BG_TARJETA,
+        )
+        recientes_panel.grid(
+            row=2, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 18)
+        )
+        ctk.CTkLabel(
+            recientes_panel, text="Actividad reciente", anchor="w",
+            font=ctk.CTkFont("Segoe UI", 15, "bold"), text_color=COLOR_TEXTO,
+        ).pack(anchor="w", padx=20, pady=(16, 8))
+        recientes = sorted(
+            range(len(self.codigos)),
+            key=lambda p: datetime.strptime(self.fechas[p], FORMATO_FECHA),
+            reverse=True,
+        )[:5]
+        if not recientes:
+            ctk.CTkLabel(
+                recientes_panel, text="No hay expedientes registrados.",
+                text_color=COLOR_TEXTO_SEC,
+            ).pack(anchor="w", padx=20, pady=(4, 16))
+        for posicion in recientes:
+            self._crear_tarjeta_reciente(recientes_panel, posicion)
+
+        acerca = ctk.CTkFrame(
+            self.dashboard_contenido, corner_radius=14, fg_color=BG_TARJETA,
+        )
+        acerca.grid(row=3, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 18))
+        ctk.CTkLabel(
+            acerca, text="Mesa de Partes Digital", anchor="w",
+            font=ctk.CTkFont("Segoe UI", 16, "bold"), text_color=COLOR_TEXTO,
+        ).pack(anchor="w", padx=20, pady=(16, 2))
+        ctk.CTkLabel(
+            acerca,
+            text="Aplicación desarrollada en Python utilizando Tkinter/CustomTkinter.",
+            anchor="w", text_color=COLOR_TEXTO_SEC,
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+        ctk.CTkLabel(
+            acerca,
+            text="Características: CRUD completo  •  Persistencia mediante archivos  •  "
+                 "Búsqueda iterativa y recursiva  •  Filtros y ordenamiento  •  "
+                 "Exportación de reportes",
+            anchor="w", wraplength=800, justify="left", text_color=COLOR_TEXTO_SEC,
+        ).pack(anchor="w", padx=20, pady=(0, 16))
+        ctk.CTkLabel(
+            self.dashboard_contenido,
+            text="Mesa de Partes Digital © 2026  •  Desarrollado para el curso de "
+                 "Fundamentos de Programación  •  Universidad Privada del Norte (UPN)"
+                 "  •  Versión 1.0",
+            anchor="center", justify="center", wraplength=850,
+            font=ctk.CTkFont("Segoe UI", 11), text_color=COLOR_TEXTO_SEC,
+        ).grid(row=4, column=0, columnspan=5, sticky="ew", padx=8, pady=(0, 14))
+
+    def _valor_mas_comun(self, valores):
+        if not valores:
+            return "—"
+        normalizados = Counter(valor.casefold() for valor in valores)
+        frecuente = normalizados.most_common(1)[0][0]
+        return next(valor for valor in valores if valor.casefold() == frecuente)
+
+    def _crear_tarjeta_reciente(self, padre, posicion):
+        tarjeta = ctk.CTkFrame(padre, height=48, corner_radius=10, fg_color="#262628")
+        tarjeta.pack(fill="x", padx=12, pady=3)
+        tarjeta.pack_propagate(False)
+        tarjeta.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(
+            tarjeta, text=self.codigos[posicion], width=130, anchor="w",
+            font=ctk.CTkFont("Segoe UI", 11, "bold"), text_color=COLOR_TEXTO,
+        ).grid(row=0, column=0, padx=(14, 8), sticky="w")
+        ctk.CTkLabel(
+            tarjeta, text=self.remitentes[posicion], anchor="w",
+            text_color=COLOR_TEXTO_SEC, font=ctk.CTkFont("Segoe UI", 11),
+        ).grid(row=0, column=1, padx=8, sticky="ew")
+        ctk.CTkLabel(
+            tarjeta, text=self.fechas[posicion], width=140, anchor="w",
+            text_color=COLOR_TEXTO_SEC, font=ctk.CTkFont("Segoe UI", 11),
+        ).grid(row=0, column=2, padx=8, sticky="w")
+        self._crear_badge(tarjeta, self.estados[posicion]).grid(
+            row=0, column=3, padx=(4, 12), sticky="e"
+        )
 
     # -------------------------------------------------------------------------
     # VISTA 1: REGISTRAR
@@ -276,6 +447,7 @@ class App(ctk.CTk):
             entrada.delete(0, "end")
         self._poner_codigo(generar_codigo(self.codigos))
         self._actualizar_total()
+        self._actualizar_dashboard_si_visible()
         self.mostrar_mensaje(self.lbl_msg_registrar,
                              f"Expediente {codigo} registrado correctamente.", True)
 
@@ -571,6 +743,7 @@ class App(ctk.CTk):
 
         codigo = self.codigos[posicion]
         self.buscar_expediente()
+        self._actualizar_dashboard_si_visible()
         self.mostrar_mensaje(
             self.lbl_msg_buscar,
             f"Estado de {codigo} actualizado correctamente.",
@@ -889,6 +1062,7 @@ class App(ctk.CTk):
 
         self._actualizar_total()
         self.buscar_expediente()
+        self._actualizar_dashboard_si_visible()
         self.mostrar_mensaje(self.lbl_msg_buscar,
                              f"Expediente {codigo} eliminado correctamente.", True)
 

@@ -14,6 +14,8 @@ Aplicación de escritorio para registrar y administrar expedientes de una mesa d
 - **Administrar expedientes desde Buscar**
   - Edita únicamente el estado (`RECIBIDO`, `EN PROCESO`, `ATENDIDO` o `ARCHIVADO`).
   - Elimina expedientes después de una confirmación.
+- **Estadísticas Generales**
+  - Dashboard con totales por estado, actividad reciente e información general.
 - Conserva los datos entre ejecuciones mediante `expedientes.txt`.
 - Valida los registros cargados para evitar incorporar datos con formato inválido.
 
@@ -41,7 +43,7 @@ Desde la carpeta raíz del proyecto, ejecuta:
 python main.py
 ```
 
-La aplicación se abrirá con la vista **Registrar**. Para navegar, utiliza el menú lateral.
+La aplicación se abrirá con la vista **Estadísticas Generales**. Para navegar, utiliza el menú lateral.
 
 ## Uso
 
@@ -66,6 +68,10 @@ Cada resultado permite ver sus detalles, editar únicamente el estado o eliminar
 
 Permite combinar filtros por estado, remitente, asunto y rango de fechas. Los resultados se pueden ordenar por código, fecha o remitente, en orden ascendente o descendente. Las estadísticas corresponden únicamente a los expedientes filtrados y **Exportar reporte** genera un CSV con el orden y los registros actualmente visibles.
 
+### Estadísticas Generales
+
+Es la página inicial y muestra los totales actuales por estado, las fechas del primer y último expediente, remitentes únicos, el estado y asunto más frecuentes, además de los cinco expedientes más recientes.
+
 ## Persistencia de datos
 
 Cada expediente ocupa una línea en `expedientes.txt` con el siguiente formato:
@@ -81,7 +87,7 @@ La fecha se almacena como `AAAA-MM-DD HH:MM`. El archivo se crea automáticament
 ```text
 .
 ├── main.py           # Punto de entrada de la aplicación
-├── ui.py             # Ventanas, navegación y operaciones de usuario
+├── ui.py             # Dashboard, formularios, búsquedas, filtros y reportes
 ├── busqueda.py       # Búsquedas iterativa y recursiva de expedientes
 ├── archivo.py        # Lectura y escritura de expedientes
 ├── validaciones.py   # Validación y limpieza de datos
