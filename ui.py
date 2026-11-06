@@ -285,103 +285,229 @@ class App(ctk.CTk):
     # -------------------------------------------------------------------------
     def vista_buscar(self, padre):
         self._encabezado(padre, "Buscar expediente",
-                         "Ingrese el código del expediente (ej. EXP-2026-001).")
+                         "Filtre por código, DNI, remitente o asunto.")
 
+        self.tipo_busqueda = ctk.StringVar(value="Código")
         barra = ctk.CTkFrame(padre, fg_color="transparent")
         barra.pack(fill="x", padx=44)
+        barra.grid_columnconfigure(1, weight=1)
+
+        self.menu_busqueda = ctk.CTkOptionMenu(
+            barra, values=["Código", "DNI", "Remitente", "Asunto"],
+            variable=self.tipo_busqueda, width=145, height=42,
+            corner_radius=10, fg_color=BG_TARJETA, button_color=BG_CAMPO,
+            button_hover_color="#48484a", font=ctk.CTkFont("Segoe UI", 13),
+            command=self._cambiar_tipo_busqueda,
+        )
+        self.menu_busqueda.grid(row=0, column=0, padx=(0, 10), sticky="w")
 
         self.entry_buscar = ctk.CTkEntry(
             barra, height=42, corner_radius=10, border_width=0, fg_color=BG_TARJETA,
             placeholder_text="EXP-2026-001", font=ctk.CTkFont("Segoe UI", 14),
         )
-        self.entry_buscar.pack(side="left", fill="x", expand=True)
+        self.entry_buscar.grid(row=0, column=1, sticky="ew")
         self.entry_buscar.bind("<Return>", lambda e: self.buscar_expediente())
+        self.entry_buscar.bind("<KeyRelease>", self._actualizar_sugerencias)
 
         ctk.CTkButton(
             barra, text="Buscar", width=120, height=42, corner_radius=10,
             font=ctk.CTkFont("Segoe UI", 14, "bold"),
             fg_color=COLOR_ACENTO, hover_color=COLOR_ACENTO_HOVER,
             command=self.buscar_expediente,
-        ).pack(side="left", padx=(12, 0))
+        ).grid(row=0, column=2, padx=(10, 0), sticky="e")
 
-        # Mensaje de "no encontrado" (rojo) debajo de la barra
+        self.sugerencias = ctk.CTkFrame(padre, fg_color=BG_TARJETA, corner_radius=10)
+        self.sugerencias.pack(fill="x", padx=44, pady=(6, 0))
+        self.sugerencias.pack_forget()
+
         self.lbl_msg_buscar = ctk.CTkLabel(
             padre, text="", font=ctk.CTkFont("Segoe UI", 14, "bold"),
             text_color=BG_CONTENIDO,
         )
-        self.lbl_msg_buscar.pack(anchor="w", padx=44, pady=(12, 0))
+        self.lbl_msg_buscar.pack(anchor="w", padx=44, pady=(10, 0))
 
-        # Zona donde se pintan los detalles
-        self.resultado = ctk.CTkFrame(padre, corner_radius=16, fg_color=BG_CONTENIDO)
-        self.resultado.pack(fill="x", padx=44, pady=12)
+        self.resultado = ctk.CTkScrollableFrame(
+            padre, corner_radius=16, fg_color=BG_CONTENIDO,
+            scrollbar_button_color=BG_CAMPO,
+            scrollbar_button_hover_color="#48484a",
+        )
+        self.resultado.pack(fill="both", expand=True, padx=44, pady=(8, 28))
+        self.resultado.grid_columnconfigure(0, weight=1)
+        self.detalle_busqueda = None
+
+    def _cambiar_tipo_busqueda(self, tipo):
+        placeholders = {
+            "Código": "EXP-2026-001",
+            "DNI": "56781234",
+            "Remitente": "José Juan",
+            "Asunto": "SUNAT",
+        }
+        self.entry_buscar.delete(0, "end")
+        self.sugerencias.pack_forget()
+        self.entry_buscar.configure(placeholder_text=placeholders[tipo])
+        self._actualizar_sugerencias()
+
+    def _valores_sugerencias(self):
+        indice = {"Código": 0, "DNI": 1, "Remitente": 2, "Asunto": 3}
+        campo = indice[self.tipo_busqueda.get()]
+        listas = (self.codigos, self.dnis, self.remitentes, self.asuntos)
+        return list(dict.fromkeys(listas[campo]))
+
+    def _actualizar_sugerencias(self, _evento=None):
+        texto = self.entry_buscar.get().strip().casefold()
+        for widget in self.sugerencias.winfo_children():
+            widget.destroy()
+
+        if not texto:
+            self.sugerencias.pack_forget()
+            return
+
+        coincidencias = [
+            valor for valor in self._valores_sugerencias()
+            if texto in valor.casefold()
+        ][:6]
+        if not coincidencias:
+            self.sugerencias.pack_forget()
+            return
+
+        for valor in coincidencias:
+            ctk.CTkButton(
+                self.sugerencias, text=valor, anchor="w", height=30,
+                fg_color="transparent", hover_color=BG_CAMPO,
+                text_color=COLOR_TEXTO, font=ctk.CTkFont("Segoe UI", 12),
+                command=lambda valor=valor: self._elegir_sugerencia(valor),
+            ).pack(fill="x", padx=6, pady=2)
+        self.sugerencias.pack(fill="x", padx=44, pady=(6, 0), before=self.lbl_msg_buscar)
+
+    def _elegir_sugerencia(self, valor):
+        self.entry_buscar.delete(0, "end")
+        self.entry_buscar.insert(0, valor)
+        self.sugerencias.pack_forget()
+        self.buscar_expediente()
 
     def buscar_expediente(self):
-        """Busca el código en los arreglos paralelos y muestra los detalles."""
-        codigo = self.entry_buscar.get().strip().upper()
+        """Busca coincidencias y muestra primero sus tarjetas compactas."""
+        texto = self.entry_buscar.get().strip()
 
-        # Limpiar resultado anterior
         for widget in self.resultado.winfo_children():
             widget.destroy()
-        self.resultado.configure(fg_color=BG_CONTENIDO)
+        self.sugerencias.pack_forget()
+        self.detalle_busqueda = None
 
-        if not validar_texto(codigo):
+        if not validar_texto(texto):
             self.mostrar_mensaje(self.lbl_msg_buscar, "Ingrese un código para buscar.", False)
             return
 
-        # La interfaz usa la versión iterativa; la recursiva está disponible
-        # en busqueda.py para comparar ambas soluciones.
-        posicion = buscar_expediente_iterativo(self.codigos, codigo)
-
-        if posicion == -1:
+        campo = {"Código": 0, "DNI": 1, "Remitente": 2, "Asunto": 3}[self.tipo_busqueda.get()]
+        listas = (self.codigos, self.dnis, self.remitentes, self.asuntos)
+        valor_buscado = texto.casefold()
+        posiciones = [
+            posicion for posicion, valor in enumerate(listas[campo])
+            if valor_buscado in valor.casefold()
+        ]
+        if not posiciones:
             self.mostrar_mensaje(self.lbl_msg_buscar,
-                                 f"No se encontró el expediente {codigo}.", False)
+                                 f"No se encontraron expedientes para “{texto}”.", False)
             return
 
         self.lbl_msg_buscar.configure(text="")
-        self.resultado.configure(fg_color=BG_TARJETA)
+        self._pintar_resultados_compactos(posiciones)
 
-        self._pintar_detalles(self.resultado, posicion)
+    def _pintar_resultados_compactos(self, posiciones):
+        encabezado = ctk.CTkLabel(
+            self.resultado, text=f"{len(posiciones)} resultado(s)",
+            anchor="w", font=ctk.CTkFont("Segoe UI", 13, "bold"),
+            text_color=COLOR_TEXTO_SEC,
+        )
+        encabezado.grid(row=0, column=0, sticky="ew", padx=16, pady=(10, 6))
 
-    def _pintar_detalles(self, contenedor, posicion):
-        """Dibuja los datos de un expediente en una tarjeta (aparición escalonada)."""
-        detalles = [
-            ("CÓDIGO", self.codigos[posicion]),
-            ("DNI", self.dnis[posicion]),
-            ("REMITENTE", self.remitentes[posicion]),
-            ("ASUNTO", self.asuntos[posicion]),
-            ("FECHA", self.fechas[posicion]),
-            ("ESTADO", self.estados[posicion]),
-        ]
+        for fila, posicion in enumerate(posiciones, start=1):
+            tarjeta = ctk.CTkFrame(
+                self.resultado, height=54, corner_radius=12, fg_color=BG_TARJETA,
+            )
+            tarjeta.grid(row=fila, column=0, sticky="ew", padx=8, pady=4)
+            tarjeta.grid_propagate(False)
+            tarjeta.grid_columnconfigure(1, weight=1)
 
-        for indice, (titulo, valor) in enumerate(detalles):
             ctk.CTkLabel(
-                contenedor, text=titulo, font=ctk.CTkFont("Segoe UI", 12, "bold"),
-                text_color=COLOR_TEXTO_SEC,
-            ).grid(row=indice, column=0, sticky="nw", padx=(28, 20), pady=10)
+                tarjeta, text=self.codigos[posicion], width=130, anchor="w",
+                font=ctk.CTkFont("Segoe UI", 12, "bold"), text_color=COLOR_TEXTO,
+            ).grid(row=0, column=0, padx=(14, 8), sticky="w")
+            resumen = f"{self.remitentes[posicion]}  •  {self.dnis[posicion]}  •  {self.asuntos[posicion]}"
+            ctk.CTkLabel(
+                tarjeta, text=resumen, anchor="w", text_color=COLOR_TEXTO_SEC,
+                font=ctk.CTkFont("Segoe UI", 12),
+            ).grid(row=0, column=1, padx=8, sticky="ew")
+            self._crear_badge(tarjeta, self.estados[posicion]).grid(
+                row=0, column=2, padx=8, sticky="e",
+            )
+            ctk.CTkButton(
+                tarjeta, text="Ver detalles", width=106, height=32, corner_radius=8,
+                fg_color=BG_CAMPO, hover_color="#48484a",
+                font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                command=lambda posicion=posicion: self._mostrar_detalles_busqueda(posicion),
+            ).grid(row=0, column=3, padx=(4, 12), sticky="e")
 
-            if titulo == "ESTADO":
-                # El estado se muestra como una "píldora" de color
-                lbl_valor = ctk.CTkLabel(
-                    contenedor, text=valor, corner_radius=8, fg_color=COLOR_ACENTO,
-                    font=ctk.CTkFont("Segoe UI", 13, "bold"), text_color=BG_TARJETA,
-                    width=110, height=28,
-                )
-            else:
-                lbl_valor = ctk.CTkLabel(
-                    contenedor, text=valor, anchor="w", justify="left",
-                    wraplength=560, font=ctk.CTkFont("Segoe UI", 15),
-                    text_color=BG_TARJETA,
-                )
-            lbl_valor.grid(row=indice, column=1, sticky="w", pady=10, padx=(0, 28))
+    def _crear_badge(self, padre, estado):
+        return ctk.CTkLabel(
+            padre, text=estado, width=90, height=26, corner_radius=8,
+            fg_color=COLOR_EXITO if estado == "RECIBIDO" else COLOR_ACENTO,
+            text_color="#102016", font=ctk.CTkFont("Segoe UI", 11, "bold"),
+        )
 
-            # Aparición escalonada de cada fila (efecto fluido)
-            if titulo == "ESTADO":
-                lbl_valor.configure(text_color=BG_CONTENIDO)
-            else:
-                self.after(indice * 70, fade_texto, lbl_valor, COLOR_TEXTO, BG_TARJETA)
+    def _mostrar_detalles_busqueda(self, posicion):
+        for widget in self.resultado.winfo_children():
+            widget.destroy()
 
-        # Margen inferior dentro de la tarjeta
-        contenedor.grid_rowconfigure(len(detalles), minsize=10)
+        self.detalle_busqueda = ctk.CTkFrame(
+            self.resultado, corner_radius=18, fg_color=BG_TARJETA,
+        )
+        self.detalle_busqueda.grid(row=0, column=0, sticky="ew", padx=16, pady=16)
+        self.detalle_busqueda.grid_columnconfigure(1, weight=1)
+
+        cabecera = ctk.CTkFrame(self.detalle_busqueda, fg_color="transparent")
+        cabecera.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 8))
+        cabecera.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            cabecera, text=self.codigos[posicion], anchor="w",
+            font=ctk.CTkFont("Segoe UI", 24, "bold"), text_color=COLOR_TEXTO,
+        ).grid(row=0, column=0, sticky="w")
+        self._crear_badge(cabecera, self.estados[posicion]).grid(row=0, column=1, sticky="e")
+
+        detalles = [
+            ("👤", "Remitente", self.remitentes[posicion]),
+            ("🪪", "DNI", self.dnis[posicion]),
+            ("📝", "Asunto", self.asuntos[posicion]),
+            ("📅", "Fecha", self.fechas[posicion]),
+        ]
+        for fila, (icono, titulo, valor) in enumerate(detalles, start=1):
+            ctk.CTkLabel(
+                self.detalle_busqueda, text=icono, width=28,
+                font=ctk.CTkFont("Segoe UI", 16),
+            ).grid(row=fila, column=0, sticky="w", padx=(28, 4), pady=9)
+            contenido = ctk.CTkFrame(self.detalle_busqueda, fg_color="transparent")
+            contenido.grid(row=fila, column=1, sticky="ew", padx=(8, 28), pady=7)
+            ctk.CTkLabel(
+                contenido, text=titulo.upper(), anchor="w",
+                font=ctk.CTkFont("Segoe UI", 10, "bold"), text_color=COLOR_TEXTO_SEC,
+            ).pack(anchor="w")
+            ctk.CTkLabel(
+                contenido, text=valor, anchor="w", wraplength=650,
+                font=ctk.CTkFont("Segoe UI", 15), text_color=COLOR_TEXTO,
+            ).pack(anchor="w")
+
+        ctk.CTkButton(
+            self.detalle_busqueda, text="← Volver a resultados", width=170,
+            height=36, corner_radius=9, fg_color=BG_CAMPO,
+            hover_color="#48484a", font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            command=self._volver_a_resultados,
+        ).grid(row=5, column=0, sticky="w", padx=28, pady=(16, 24))
+
+    def _volver_a_resultados(self):
+        if self.detalle_busqueda is not None:
+            self.detalle_busqueda.destroy()
+            self.detalle_busqueda = None
+        self.buscar_expediente()
 
     # -------------------------------------------------------------------------
     # VISTA 3: LISTAR
