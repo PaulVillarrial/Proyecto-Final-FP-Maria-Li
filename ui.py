@@ -85,7 +85,7 @@ class App(ctk.CTk):
             font=ctk.CTkFont("Segoe UI", 12), text_color=COLOR_TEXTO_SEC,
         ).pack(anchor="w", padx=24, pady=(0, 32))
 
-        opciones = [("registrar", "Registrar"), ("buscar", "Buscar"), ("listar", "Listar"), ("eliminar", "Eliminar")]
+        opciones = [("registrar", "Registrar"), ("buscar", "Buscar"), ("listar", "Listar")]
         for clave, texto in opciones:
             boton = ctk.CTkButton(
                 self.sidebar, text=texto, anchor="w", height=42, corner_radius=10,
@@ -148,7 +148,6 @@ class App(ctk.CTk):
             "registrar": self.vista_registrar,
             "buscar": self.vista_buscar,
             "listar": self.vista_listar,
-            "eliminar": self.vista_eliminar,
         }
         constructores[nombre](self.vista_actual)
         deslizar_entrada(self.vista_actual)
@@ -286,7 +285,9 @@ class App(ctk.CTk):
     def vista_buscar(self, padre):
         self._encabezado(padre, "Buscar expediente",
                          "Filtre por código, DNI, remitente o asunto.")
+        self._configurar_controles_busqueda(padre)
 
+    def _configurar_controles_busqueda(self, padre):
         self.tipo_busqueda = ctk.StringVar(value="Código")
         barra = ctk.CTkFrame(padre, fg_color="transparent")
         barra.pack(fill="x", padx=44)
@@ -353,6 +354,16 @@ class App(ctk.CTk):
         listas = (self.codigos, self.dnis, self.remitentes, self.asuntos)
         return list(dict.fromkeys(listas[campo]))
 
+    def _validar_entrada_busqueda(self, texto):
+        if not validar_texto(texto):
+            return "Ingrese un valor para buscar."
+        if self.tipo_busqueda.get() == "DNI":
+            if not texto.isdigit():
+                return "El DNI debe contener únicamente dígitos numéricos."
+            if len(texto) != 8:
+                return "El DNI debe tener exactamente 8 dígitos."
+        return ""
+
     def _actualizar_sugerencias(self, _evento=None):
         texto = self.entry_buscar.get().strip().casefold()
         for widget in self.sugerencias.winfo_children():
@@ -394,8 +405,9 @@ class App(ctk.CTk):
         self.sugerencias.pack_forget()
         self.detalle_busqueda = None
 
-        if not validar_texto(texto):
-            self.mostrar_mensaje(self.lbl_msg_buscar, "Ingrese un código para buscar.", False)
+        error = self._validar_entrada_busqueda(texto)
+        if error:
+            self.mostrar_mensaje(self.lbl_msg_buscar, error, False)
             return
 
         campo = {"Código": 0, "DNI": 1, "Remitente": 2, "Asunto": 3}[self.tipo_busqueda.get()]
@@ -447,6 +459,22 @@ class App(ctk.CTk):
                 font=ctk.CTkFont("Segoe UI", 12, "bold"),
                 command=lambda posicion=posicion: self._mostrar_detalles_busqueda(posicion),
             ).grid(row=0, column=3, padx=(4, 12), sticky="e")
+            ctk.CTkButton(
+                tarjeta, text="Editar estado", width=108, height=32, corner_radius=8,
+                fg_color=BG_CAMPO, hover_color="#48484a",
+                font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                command=lambda posicion=posicion: self._mostrar_detalles_busqueda(
+                    posicion, True
+                ),
+            ).grid(row=0, column=4, padx=(0, 4), sticky="e")
+            ctk.CTkButton(
+                tarjeta, text="Eliminar", width=88, height=32, corner_radius=8,
+                fg_color=COLOR_ERROR, hover_color="#ff6961",
+                font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                command=lambda posicion=posicion: self._confirmar_eliminacion(
+                    self.codigos[posicion]
+                ),
+            ).grid(row=0, column=5, padx=(0, 12), sticky="e")
 
     def _crear_badge(self, padre, estado):
         return ctk.CTkLabel(
@@ -455,7 +483,7 @@ class App(ctk.CTk):
             text_color="#102016", font=ctk.CTkFont("Segoe UI", 11, "bold"),
         )
 
-    def _mostrar_detalles_busqueda(self, posicion):
+    def _mostrar_detalles_busqueda(self, posicion, editar_estado=False):
         for widget in self.resultado.winfo_children():
             widget.destroy()
 
@@ -496,12 +524,58 @@ class App(ctk.CTk):
                 font=ctk.CTkFont("Segoe UI", 15), text_color=COLOR_TEXTO,
             ).pack(anchor="w")
 
+        estado = ctk.CTkFrame(self.detalle_busqueda, fg_color="transparent")
+        estado.grid(row=5, column=0, columnspan=2, sticky="ew", padx=28, pady=(8, 4))
+        ctk.CTkLabel(
+            estado, text="ESTADO", anchor="w",
+            font=ctk.CTkFont("Segoe UI", 10, "bold"), text_color=COLOR_TEXTO_SEC,
+        ).pack(anchor="w")
+        if editar_estado:
+            selector_estado = ctk.CTkOptionMenu(
+                estado, values=["RECIBIDO", "EN PROCESO", "ATENDIDO", "ARCHIVADO"],
+                width=190, height=36, corner_radius=9,
+                fg_color=BG_CAMPO, button_color=BG_CAMPO,
+                button_hover_color="#48484a", font=ctk.CTkFont("Segoe UI", 13),
+            )
+            selector_estado.set(self.estados[posicion])
+            selector_estado.pack(side="left", pady=(5, 0))
+            ctk.CTkButton(
+                estado, text="Guardar", width=110, height=36, corner_radius=9,
+                fg_color=COLOR_ACENTO, hover_color=COLOR_ACENTO_HOVER,
+                font=ctk.CTkFont("Segoe UI", 12, "bold"),
+                command=lambda: self._guardar_estado(posicion, selector_estado.get()),
+            ).pack(side="left", padx=(10, 0), pady=(5, 0))
+        else:
+            self._crear_badge(estado, self.estados[posicion]).pack(anchor="w", pady=(5, 0))
+
         ctk.CTkButton(
             self.detalle_busqueda, text="← Volver a resultados", width=170,
             height=36, corner_radius=9, fg_color=BG_CAMPO,
             hover_color="#48484a", font=ctk.CTkFont("Segoe UI", 12, "bold"),
             command=self._volver_a_resultados,
-        ).grid(row=5, column=0, sticky="w", padx=28, pady=(16, 24))
+        ).grid(row=6, column=0, columnspan=2, sticky="w", padx=28, pady=(16, 24))
+
+    def _guardar_estado(self, posicion, nuevo_estado):
+        anterior = self.estados[posicion]
+        self.estados[posicion] = nuevo_estado
+        try:
+            reescribir_expedientes_archivo(
+                self.codigos, self.dnis, self.remitentes,
+                self.asuntos, self.fechas, self.estados,
+            )
+        except OSError as error:
+            self.estados[posicion] = anterior
+            self.mostrar_mensaje(self.lbl_msg_buscar,
+                                 f"Error al actualizar el archivo: {error}", False)
+            return
+
+        codigo = self.codigos[posicion]
+        self.buscar_expediente()
+        self.mostrar_mensaje(
+            self.lbl_msg_buscar,
+            f"Estado de {codigo} actualizado correctamente.",
+            True,
+        )
 
     def _volver_a_resultados(self):
         if self.detalle_busqueda is not None:
@@ -558,107 +632,48 @@ class App(ctk.CTk):
             tabla.after(15, self._insertar_filas, tabla, filas, inicio + lote)
 
 
-    # -------------------------------------------------------------------------
-    # VISTA 4: ELIMINAR
-    # -------------------------------------------------------------------------
-    def vista_eliminar(self, padre):
-        self._encabezado(padre, "Eliminar expediente",
-                         "Busque el expediente por su código y confirme para eliminarlo.")
-
-        barra = ctk.CTkFrame(padre, fg_color="transparent")
-        barra.pack(fill="x", padx=44)
-
-        self.entry_eliminar = ctk.CTkEntry(
-            barra, height=42, corner_radius=10, border_width=0, fg_color=BG_TARJETA,
-            placeholder_text="EXP-2026-001", font=ctk.CTkFont("Segoe UI", 14),
-        )
-        self.entry_eliminar.pack(side="left", fill="x", expand=True)
-        self.entry_eliminar.bind("<Return>", lambda e: self.buscar_para_eliminar())
-
-        ctk.CTkButton(
-            barra, text="Buscar", width=120, height=42, corner_radius=10,
-            font=ctk.CTkFont("Segoe UI", 14, "bold"),
-            fg_color=COLOR_ACENTO, hover_color=COLOR_ACENTO_HOVER,
-            command=self.buscar_para_eliminar,
-        ).pack(side="left", padx=(12, 0))
-
-        # Mensajes de error / éxito (sin ventanas emergentes)
-        self.lbl_msg_eliminar = ctk.CTkLabel(
-            padre, text="", font=ctk.CTkFont("Segoe UI", 14, "bold"),
-            text_color=BG_CONTENIDO,
-        )
-        self.lbl_msg_eliminar.pack(anchor="w", padx=44, pady=(12, 0))
-
-        # Tarjeta con los detalles y la confirmación
-        self.resultado_eliminar = ctk.CTkFrame(padre, corner_radius=16, fg_color=BG_CONTENIDO)
-        self.resultado_eliminar.pack(fill="x", padx=44, pady=12)
-
     def _buscar_posicion(self, codigo):
         """Devuelve el índice del código usando la búsqueda iterativa."""
         return buscar_expediente_iterativo(self.codigos, codigo)
 
-    def _limpiar_resultado_eliminar(self):
-        try:
-            for widget in self.resultado_eliminar.winfo_children():
-                widget.destroy()
-            self.resultado_eliminar.configure(fg_color=BG_CONTENIDO)
-        except tk.TclError:
-            pass  # La vista ya cambió
-
-    def buscar_para_eliminar(self):
-        """Muestra el expediente encontrado y pide confirmación antes de borrarlo."""
-        codigo = self.entry_eliminar.get().strip().upper()
-        self._limpiar_resultado_eliminar()
-
-        if not validar_texto(codigo):
-            self.mostrar_mensaje(self.lbl_msg_eliminar, "Ingrese un código para buscar.", False)
-            return
-
-        posicion = self._buscar_posicion(codigo)
-        if posicion == -1:
-            self.mostrar_mensaje(self.lbl_msg_eliminar,
-                                 f"No se encontró el expediente {codigo}.", False)
-            return
-
-        self.lbl_msg_eliminar.configure(text="")
-        self.resultado_eliminar.configure(fg_color=BG_TARJETA)
-        self._pintar_detalles(self.resultado_eliminar, posicion)
-
-        # Zona de confirmación (reemplaza al messagebox)
-        confirmacion = ctk.CTkFrame(self.resultado_eliminar, fg_color="transparent")
-        confirmacion.grid(row=7, column=0, columnspan=2, sticky="w", padx=28, pady=(0, 24))
+    def _confirmar_eliminacion(self, codigo):
+        dialogo = ctk.CTkToplevel(self)
+        dialogo.title("Confirmar eliminación")
+        dialogo.geometry("420x190")
+        dialogo.resizable(False, False)
+        dialogo.transient(self)
+        dialogo.grab_set()
+        dialogo.configure(fg_color=BG_CONTENIDO)
 
         ctk.CTkLabel(
-            confirmacion, text=f"¿Eliminar {codigo}? Esta acción no se puede deshacer.",
-            font=ctk.CTkFont("Segoe UI", 13, "bold"), text_color=COLOR_ERROR,
-        ).pack(anchor="w", pady=(0, 10))
+            dialogo, text=f"¿Está seguro de eliminar el expediente {codigo}?",
+            font=ctk.CTkFont("Segoe UI", 15, "bold"),
+            text_color=COLOR_TEXTO, wraplength=360,
+        ).pack(padx=28, pady=(34, 24))
 
-        botones = ctk.CTkFrame(confirmacion, fg_color="transparent")
-        botones.pack(anchor="w")
+        botones = ctk.CTkFrame(dialogo, fg_color="transparent")
+        botones.pack()
         ctk.CTkButton(
-            botones, text="Confirmar eliminación", height=40, corner_radius=10,
-            font=ctk.CTkFont("Segoe UI", 13, "bold"),
-            fg_color=COLOR_ERROR, hover_color="#ff6961",
-            command=lambda: self.eliminar_expediente(codigo),
-        ).pack(side="left")
-        ctk.CTkButton(
-            botones, text="Cancelar", height=40, corner_radius=10,
-            font=ctk.CTkFont("Segoe UI", 13, "bold"),
+            botones, text="Cancelar", width=110, height=36, corner_radius=9,
             fg_color=BG_CAMPO, hover_color="#48484a",
-            command=self._cancelar_eliminacion,
-        ).pack(side="left", padx=(12, 0))
+            command=dialogo.destroy,
+        ).pack(side="left", padx=6)
+        ctk.CTkButton(
+            botones, text="Eliminar", width=110, height=36, corner_radius=9,
+            fg_color=COLOR_ERROR, hover_color="#ff6961",
+            command=lambda: self._confirmar_y_eliminar(dialogo, codigo),
+        ).pack(side="left", padx=6)
 
-    def _cancelar_eliminacion(self):
-        self.lbl_msg_eliminar.configure(text="")
-        self.after(120, self._limpiar_resultado_eliminar)
+    def _confirmar_y_eliminar(self, dialogo, codigo):
+        dialogo.destroy()
+        self.eliminar_expediente(codigo)
 
     def eliminar_expediente(self, codigo):
         """Quita el registro de los arreglos paralelos y reescribe el archivo."""
         posicion = self._buscar_posicion(codigo)
         if posicion == -1:
-            self.mostrar_mensaje(self.lbl_msg_eliminar,
+            self.mostrar_mensaje(self.lbl_msg_buscar,
                                  f"El expediente {codigo} ya no existe.", False)
-            self.after(120, self._limpiar_resultado_eliminar)
             return
 
         listas = (self.codigos, self.dnis, self.remitentes,
@@ -671,14 +686,13 @@ class App(ctk.CTk):
             # Revertir la memoria si el archivo no pudo actualizarse
             for lista, valor in zip(listas, registro):
                 lista.insert(posicion, valor)
-            self.mostrar_mensaje(self.lbl_msg_eliminar,
+            self.mostrar_mensaje(self.lbl_msg_buscar,
                                  f"Error al actualizar el archivo: {error}", False)
             return
 
-        self.entry_eliminar.delete(0, "end")
         self._actualizar_total()
-        self.after(120, self._limpiar_resultado_eliminar)
-        self.mostrar_mensaje(self.lbl_msg_eliminar,
+        self.buscar_expediente()
+        self.mostrar_mensaje(self.lbl_msg_buscar,
                              f"Expediente {codigo} eliminado correctamente.", True)
 
 

@@ -11,7 +11,9 @@ Aplicación de escritorio para registrar y administrar expedientes de una mesa d
   - Usa `RECIBIDO` como estado inicial.
 - **Buscar expedientes** por código.
 - **Listar expedientes** ordenados ascendentemente por código.
-- **Eliminar expedientes** después de una confirmación.
+- **Administrar expedientes desde Buscar**
+  - Edita únicamente el estado (`RECIBIDO`, `EN PROCESO`, `ATENDIDO` o `ARCHIVADO`).
+  - Elimina expedientes después de una confirmación.
 - Conserva los datos entre ejecuciones mediante `expedientes.txt`.
 - Valida los registros cargados para evitar incorporar datos con formato inválido.
 
@@ -49,7 +51,7 @@ Completa los campos **DNI**, **Remitente** y **Asunto**, y selecciona **Guardar 
 
 ### Buscar
 
-Escribe un código como `EXP-2026-001` y selecciona **Buscar**. La búsqueda no distingue entre mayúsculas y minúsculas.
+Selecciona el tipo de búsqueda (Código, DNI, Remitente o Asunto), escribe el valor y selecciona **Buscar**. La búsqueda no distingue entre mayúsculas y minúsculas y muestra sugerencias mientras escribes.
 
 La lógica de búsqueda está disponible en dos versiones para fines académicos:
 
@@ -58,13 +60,11 @@ La lógica de búsqueda está disponible en dos versiones para fines académicos
 
 Ambas funciones devuelven la posición del expediente encontrado o `-1` si no existe. La interfaz utiliza la versión iterativa para mantener el comportamiento original.
 
+Cada resultado permite ver sus detalles, editar únicamente el estado o eliminar el expediente con confirmación. Los cambios de estado y las eliminaciones se guardan en `expedientes.txt`.
+
 ### Listar
 
 Muestra todos los expedientes cargados en una tabla con código, DNI, remitente, asunto, fecha y estado.
-
-### Eliminar
-
-Busca un expediente por código y confirma la eliminación. Esta operación actualiza tanto la información en memoria como `expedientes.txt`.
 
 ## Persistencia de datos
 
