@@ -1,8 +1,9 @@
 """Interfaz gr?fica y l?gica de vistas."""
 
 import tkinter as tk
+import csv
 from datetime import datetime
-from tkinter import ttk
+from tkinter import filedialog, ttk
 
 import customtkinter as ctk
 
@@ -13,7 +14,6 @@ from codigos import generar_codigo
 from constantes import (BG_CAMPO, BG_CONTENIDO, BG_SIDEBAR, BG_TARJETA, COLOR_ACENTO,
                          COLOR_ACENTO_HOVER, COLOR_ERROR, COLOR_EXITO, COLOR_TEXTO,
                          COLOR_TEXTO_SEC, ESTADO_INICIAL, FORMATO_FECHA)
-from ordenamiento import ordenar_burbuja
 from validaciones import limpiar_campo, validar_dni, validar_texto
 
 
@@ -588,48 +588,245 @@ class App(ctk.CTk):
     # -------------------------------------------------------------------------
     def vista_listar(self, padre):
         self._encabezado(padre, "Listado de expedientes",
-                         "Ordenados por código de forma ascendente.")
+                         "Filtre los expedientes y ordénelos según sus necesidades.")
 
-        tarjeta = ctk.CTkFrame(padre, corner_radius=16, fg_color=BG_TARJETA)
-        tarjeta.pack(fill="both", expand=True, padx=44, pady=(0, 36))
-        tarjeta.grid_rowconfigure(0, weight=1)
-        tarjeta.grid_columnconfigure(0, weight=1)
+        self.filtro_estado = ctk.StringVar(value="Todos los estados")
+        self.orden_campo = ctk.StringVar(value="Código")
+        self.orden_direccion = ctk.StringVar(value="Ascendente")
+        self.mostrar_todos = ctk.BooleanVar(value=False)
 
-        columnas = ("codigo", "dni", "remitente", "asunto", "fecha", "estado")
-        encabezados = ("Código", "DNI", "Remitente", "Asunto", "Fecha", "Estado")
-        anchos = (130, 90, 190, 260, 140, 100)
+        filtros = ctk.CTkFrame(padre, corner_radius=14, fg_color=BG_TARJETA)
+        filtros.pack(fill="x", padx=44, pady=(0, 8))
+        filtros.grid_columnconfigure(1, weight=1)
+        filtros.grid_columnconfigure(3, weight=1)
 
-        tabla = ttk.Treeview(tarjeta, columns=columnas, show="headings", selectmode="browse")
-        for col, texto, ancho in zip(columnas, encabezados, anchos):
-            tabla.heading(col, text=texto)
-            tabla.column(col, width=ancho, minwidth=70, anchor="w")
-        tabla.tag_configure("impar", background="#262628")
-        tabla.grid(row=0, column=0, sticky="nsew", padx=(12, 0), pady=12)
+        ctk.CTkCheckBox(
+            filtros, text="Mostrar todos", variable=self.mostrar_todos,
+            command=self._alternar_mostrar_todos, font=ctk.CTkFont("Segoe UI", 12),
+            text_color=COLOR_TEXTO,
+        ).grid(row=0, column=0, padx=(16, 10), pady=(14, 8), sticky="w")
+        ctk.CTkLabel(
+            filtros, text="Estado", text_color=COLOR_TEXTO_SEC,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+        ).grid(row=0, column=1, padx=8, pady=(14, 8), sticky="e")
+        self.filtro_estado_menu = ctk.CTkOptionMenu(
+            filtros, variable=self.filtro_estado,
+            values=["Todos los estados", "RECIBIDO", "EN PROCESO", "ATENDIDO", "ARCHIVADO"],
+            width=155, height=34, corner_radius=8, fg_color=BG_CAMPO,
+            button_color=BG_CAMPO, button_hover_color="#48484a",
+            command=lambda _: self._actualizar_listado(),
+        )
+        self.filtro_estado_menu.grid(row=0, column=2, padx=(0, 16), pady=(14, 8))
 
-        scroll = ctk.CTkScrollbar(tarjeta, command=tabla.yview)
-        scroll.grid(row=0, column=1, sticky="ns", padx=(4, 8), pady=12)
-        tabla.configure(yscrollcommand=scroll.set)
+        ctk.CTkLabel(
+            filtros, text="Remitente", text_color=COLOR_TEXTO_SEC,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+        ).grid(row=1, column=0, padx=(16, 8), pady=6, sticky="e")
+        self.filtro_remitente = ctk.CTkEntry(
+            filtros, height=34, corner_radius=8, border_width=0,
+            fg_color=BG_CAMPO, placeholder_text="Contiene...",
+        )
+        self.filtro_remitente.grid(row=1, column=1, padx=8, pady=6, sticky="ew")
+        self.filtro_remitente.bind("<KeyRelease>", lambda _: self._actualizar_listado())
 
-        # Ordenar con burbuja y cargar filas con aparición progresiva
-        orden = ordenar_burbuja(self.codigos)
-        filas = [
-            (self.codigos[i], self.dnis[i], self.remitentes[i],
-             self.asuntos[i], self.fechas[i], self.estados[i])
-            for i in orden
-        ]
-        self._insertar_filas(tabla, filas, 0)
+        ctk.CTkLabel(
+            filtros, text="Asunto", text_color=COLOR_TEXTO_SEC,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+        ).grid(row=1, column=2, padx=(8, 4), pady=6, sticky="e")
+        self.filtro_asunto = ctk.CTkEntry(
+            filtros, height=34, corner_radius=8, border_width=0,
+            fg_color=BG_CAMPO, placeholder_text="Contiene...",
+        )
+        self.filtro_asunto.grid(row=1, column=3, padx=(4, 16), pady=6, sticky="ew")
+        self.filtro_asunto.bind("<KeyRelease>", lambda _: self._actualizar_listado())
 
-    def _insertar_filas(self, tabla, filas, inicio):
-        """Inserta las filas por lotes pequeños para simular una carga fluida."""
-        lote = max(1, len(filas) // 40)
+        ctk.CTkLabel(
+            filtros, text="Fecha desde", text_color=COLOR_TEXTO_SEC,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+        ).grid(row=2, column=0, padx=(16, 8), pady=(6, 14), sticky="e")
+        self.filtro_fecha_desde = ctk.CTkEntry(
+            filtros, height=34, corner_radius=8, border_width=0,
+            fg_color=BG_CAMPO, placeholder_text="AAAA-MM-DD",
+        )
+        self.filtro_fecha_desde.grid(row=2, column=1, padx=8, pady=(6, 14), sticky="ew")
+        self.filtro_fecha_desde.bind("<KeyRelease>", lambda _: self._actualizar_listado())
+
+        ctk.CTkLabel(
+            filtros, text="Fecha hasta", text_color=COLOR_TEXTO_SEC,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+        ).grid(row=2, column=2, padx=(8, 4), pady=(6, 14), sticky="e")
+        self.filtro_fecha_hasta = ctk.CTkEntry(
+            filtros, height=34, corner_radius=8, border_width=0,
+            fg_color=BG_CAMPO, placeholder_text="AAAA-MM-DD",
+        )
+        self.filtro_fecha_hasta.grid(row=2, column=3, padx=(4, 16), pady=(6, 14), sticky="ew")
+        self.filtro_fecha_hasta.bind("<KeyRelease>", lambda _: self._actualizar_listado())
+
+        orden = ctk.CTkFrame(padre, corner_radius=14, fg_color=BG_TARJETA)
+        orden.pack(fill="x", padx=44, pady=(0, 8))
+        ctk.CTkLabel(
+            orden, text="Ordenar por", text_color=COLOR_TEXTO_SEC,
+            font=ctk.CTkFont("Segoe UI", 11, "bold"),
+        ).pack(side="left", padx=(16, 8), pady=10)
+        ctk.CTkOptionMenu(
+            orden, variable=self.orden_campo, values=["Código", "Fecha", "Remitente"],
+            width=130, height=34, corner_radius=8, fg_color=BG_CAMPO,
+            button_color=BG_CAMPO, button_hover_color="#48484a",
+            command=lambda _: self._actualizar_listado(),
+        ).pack(side="left", pady=10)
+        ctk.CTkOptionMenu(
+            orden, variable=self.orden_direccion, values=["Ascendente", "Descendente"],
+            width=135, height=34, corner_radius=8, fg_color=BG_CAMPO,
+            button_color=BG_CAMPO, button_hover_color="#48484a",
+            command=lambda _: self._actualizar_listado(),
+        ).pack(side="left", padx=8, pady=10)
+        ctk.CTkButton(
+            orden, text="Exportar reporte", width=145, height=34, corner_radius=8,
+            fg_color=COLOR_ACENTO, hover_color=COLOR_ACENTO_HOVER,
+            font=ctk.CTkFont("Segoe UI", 12, "bold"),
+            command=self._exportar_reporte,
+        ).pack(side="right", padx=16, pady=10)
+
+        self.lbl_estadisticas = ctk.CTkLabel(
+            padre, text="", anchor="w", justify="left",
+            font=ctk.CTkFont("Segoe UI", 12), text_color=COLOR_TEXTO_SEC,
+        )
+        self.lbl_estadisticas.pack(fill="x", padx=44, pady=(2, 6))
+
+        self.resultado_listar = ctk.CTkScrollableFrame(
+            padre, corner_radius=16, fg_color=BG_CONTENIDO,
+            scrollbar_button_color=BG_CAMPO,
+            scrollbar_button_hover_color="#48484a",
+        )
+        self.resultado_listar.pack(fill="both", expand=True, padx=44, pady=(0, 28))
+        self.resultado_listar.grid_columnconfigure(0, weight=1)
+        self._actualizar_listado()
+
+    def _alternar_mostrar_todos(self):
+        if self.mostrar_todos.get():
+            self.filtro_estado.set("Todos los estados")
+            for entrada in (self.filtro_remitente, self.filtro_asunto,
+                            self.filtro_fecha_desde, self.filtro_fecha_hasta):
+                entrada.delete(0, "end")
+        self._actualizar_listado()
+
+    def _obtener_listado_filtrado(self):
+        desde_texto = self.filtro_fecha_desde.get().strip()
+        hasta_texto = self.filtro_fecha_hasta.get().strip()
+        desde = hasta = None
+        if desde_texto:
+            desde = datetime.strptime(desde_texto, "%Y-%m-%d")
+        if hasta_texto:
+            hasta = datetime.strptime(hasta_texto, "%Y-%m-%d").replace(
+                hour=23, minute=59
+            )
+        if desde and hasta and desde > hasta:
+            raise ValueError("La fecha desde no puede ser posterior a la fecha hasta.")
+
+        remitente = self.filtro_remitente.get().strip().casefold()
+        asunto = self.filtro_asunto.get().strip().casefold()
+        posiciones = []
+        for posicion, fecha_texto in enumerate(self.fechas):
+            fecha = datetime.strptime(fecha_texto, FORMATO_FECHA)
+            if not self.mostrar_todos.get():
+                if (self.filtro_estado.get() != "Todos los estados"
+                        and self.estados[posicion] != self.filtro_estado.get()):
+                    continue
+                if remitente and remitente not in self.remitentes[posicion].casefold():
+                    continue
+                if asunto and asunto not in self.asuntos[posicion].casefold():
+                    continue
+                if desde and fecha < desde:
+                    continue
+                if hasta and fecha > hasta:
+                    continue
+            posiciones.append(posicion)
+
+        campo = {"Código": self.codigos, "Fecha": self.fechas,
+                 "Remitente": self.remitentes}[self.orden_campo.get()]
+        posiciones.sort(key=lambda posicion: campo[posicion].casefold()
+                       if isinstance(campo[posicion], str) else campo[posicion])
+        if self.orden_direccion.get() == "Descendente":
+            posiciones.reverse()
+        return posiciones
+
+    def _actualizar_listado(self):
+        for widget in self.resultado_listar.winfo_children():
+            widget.destroy()
         try:
-            for k in range(inicio, min(inicio + lote, len(filas))):
-                etiqueta = ("impar",) if k % 2 else ()
-                tabla.insert("", "end", values=filas[k], tags=etiqueta)
-        except tk.TclError:
-            return  # La vista cambió mientras se cargaba
-        if inicio + lote < len(filas):
-            tabla.after(15, self._insertar_filas, tabla, filas, inicio + lote)
+            posiciones = self._obtener_listado_filtrado()
+        except ValueError as error:
+            self.lbl_estadisticas.configure(text=f"Error: {error}", text_color=COLOR_ERROR)
+            return
+
+        conteo = {estado: 0 for estado in
+                  ("RECIBIDO", "EN PROCESO", "ATENDIDO", "ARCHIVADO")}
+        for posicion in posiciones:
+            conteo[self.estados[posicion]] = conteo.get(self.estados[posicion], 0) + 1
+        estadisticas = "Resultados encontrados: " + str(len(posiciones))
+        estadisticas += "    |    " + "    ".join(
+            f"{estado}: {conteo[estado]}" for estado in conteo
+        )
+        self.lbl_estadisticas.configure(text=estadisticas, text_color=COLOR_TEXTO_SEC)
+
+        for fila, posicion in enumerate(posiciones):
+            self._crear_tarjeta_listado(fila, posicion)
+
+    def _crear_tarjeta_listado(self, fila, posicion):
+        tarjeta = ctk.CTkFrame(
+            self.resultado_listar, height=74, corner_radius=12, fg_color=BG_TARJETA,
+        )
+        tarjeta.grid(row=fila, column=0, sticky="ew", padx=8, pady=4)
+        tarjeta.grid_propagate(False)
+        tarjeta.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(
+            tarjeta, text=self.codigos[posicion], width=130, anchor="w",
+            font=ctk.CTkFont("Segoe UI", 12, "bold"), text_color=COLOR_TEXTO,
+        ).grid(row=0, column=0, padx=(14, 8), sticky="w")
+        contenido = (
+            f"{self.dnis[posicion]}  •  {self.remitentes[posicion]}  •  "
+            f"{self.asuntos[posicion]}  •  {self.fechas[posicion]}"
+        )
+        ctk.CTkLabel(
+            tarjeta, text=contenido, anchor="w", text_color=COLOR_TEXTO_SEC,
+            font=ctk.CTkFont("Segoe UI", 12), wraplength=650,
+        ).grid(row=0, column=1, padx=8, sticky="ew")
+        self._crear_badge(tarjeta, self.estados[posicion]).grid(
+            row=0, column=2, padx=(8, 14), sticky="e",
+        )
+
+    def _exportar_reporte(self):
+        try:
+            posiciones = self._obtener_listado_filtrado()
+        except ValueError as error:
+            self.lbl_estadisticas.configure(text=f"Error: {error}", text_color=COLOR_ERROR)
+            return
+        ruta = filedialog.asksaveasfilename(
+            title="Exportar reporte", defaultextension=".csv",
+            initialfile="reporte.csv",
+            filetypes=[("Archivo CSV", "*.csv"), ("Archivo de texto", "*.txt")],
+        )
+        if not ruta:
+            return
+        try:
+            with open(ruta, "w", newline="", encoding="utf-8-sig") as reporte:
+                escritor = csv.writer(reporte)
+                escritor.writerow(["Código", "DNI", "Remitente", "Asunto", "Fecha", "Estado"])
+                for posicion in posiciones:
+                    escritor.writerow([
+                        self.codigos[posicion], self.dnis[posicion],
+                        self.remitentes[posicion], self.asuntos[posicion],
+                        self.fechas[posicion], self.estados[posicion],
+                    ])
+        except OSError as error:
+            self.lbl_estadisticas.configure(
+                text=f"Error al exportar el reporte: {error}", text_color=COLOR_ERROR
+            )
+            return
+        self.lbl_estadisticas.configure(
+            text=f"Reporte exportado correctamente: {ruta}",
+            text_color=COLOR_EXITO,
+        )
 
 
     def _buscar_posicion(self, codigo):

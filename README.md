@@ -64,7 +64,7 @@ Cada resultado permite ver sus detalles, editar únicamente el estado o eliminar
 
 ### Listar
 
-Muestra todos los expedientes cargados en una tabla con código, DNI, remitente, asunto, fecha y estado.
+Permite combinar filtros por estado, remitente, asunto y rango de fechas. Los resultados se pueden ordenar por código, fecha o remitente, en orden ascendente o descendente. Las estadísticas corresponden únicamente a los expedientes filtrados y **Exportar reporte** genera un CSV con el orden y los registros actualmente visibles.
 
 ## Persistencia de datos
 
