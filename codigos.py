@@ -1,10 +1,10 @@
-"""Generaci?n de c?digos correlativos."""
+"""Generación de códigos correlativos."""
 
 from datetime import datetime
 
 
 def generar_codigo(codigos):
-    """Genera el siguiente c?digo correlativo (ej. EXP-2026-006)."""
+    """Genera el siguiente código correlativo (ej. EXP-2026-006)."""
     anio = datetime.now().year
     ultimo_numero = 0
     if codigos:

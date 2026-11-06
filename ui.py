@@ -8,6 +8,7 @@ import customtkinter as ctk
 
 from animaciones import deslizar_entrada, fade_texto
 from archivo import cargar_expedientes_archivo, guardar_expediente_archivo, reescribir_expedientes_archivo
+from busqueda import buscar_expediente_iterativo
 from codigos import generar_codigo
 from constantes import (BG_CAMPO, BG_CONTENIDO, BG_SIDEBAR, BG_TARJETA, COLOR_ACENTO,
                          COLOR_ACENTO_HOVER, COLOR_ERROR, COLOR_EXITO, COLOR_TEXTO,
@@ -327,12 +328,9 @@ class App(ctk.CTk):
             self.mostrar_mensaje(self.lbl_msg_buscar, "Ingrese un código para buscar.", False)
             return
 
-        # Búsqueda secuencial
-        posicion = -1
-        for i in range(len(self.codigos)):
-            if self.codigos[i] == codigo:
-                posicion = i
-                break
+        # La interfaz usa la versión iterativa; la recursiva está disponible
+        # en busqueda.py para comparar ambas soluciones.
+        posicion = buscar_expediente_iterativo(self.codigos, codigo)
 
         if posicion == -1:
             self.mostrar_mensaje(self.lbl_msg_buscar,
@@ -470,11 +468,8 @@ class App(ctk.CTk):
         self.resultado_eliminar.pack(fill="x", padx=44, pady=12)
 
     def _buscar_posicion(self, codigo):
-        """Búsqueda secuencial: devuelve el índice del código o -1 si no existe."""
-        for i in range(len(self.codigos)):
-            if self.codigos[i] == codigo:
-                return i
-        return -1
+        """Devuelve el índice del código usando la búsqueda iterativa."""
+        return buscar_expediente_iterativo(self.codigos, codigo)
 
     def _limpiar_resultado_eliminar(self):
         try:

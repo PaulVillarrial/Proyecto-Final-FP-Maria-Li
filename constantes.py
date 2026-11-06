@@ -1,4 +1,4 @@
-"""Constantes de configuraci?n y presentaci?n."""
+"""Constantes de configuración y presentación."""
 
 ESTADO_INICIAL = "RECIBIDO"
 FORMATO_FECHA = "%Y-%m-%d %H:%M"

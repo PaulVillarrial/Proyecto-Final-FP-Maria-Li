@@ -1,4 +1,4 @@
-"""Utilidades de animaci?n para la interfaz gr?fica."""
+"""Utilidades de animación para la interfaz gráfica."""
 
 import tkinter as tk
 

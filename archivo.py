@@ -11,7 +11,7 @@ SEPARADOR = "|"
 
 
 def formatear_expediente(codigo, dni, remitente, asunto, fecha, estado):
-    """Formatea los datos del expediente en una sola l?nea delimitada por '|'.
+    """Formatea los datos del expediente en una sola línea delimitada por '|'.
     
     El orden de los campos debe coincidir con el de los arreglos paralelos.
     """
